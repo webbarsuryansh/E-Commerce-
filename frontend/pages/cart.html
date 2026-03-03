@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cart - ShopVerse</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <a class="logo" href="/">Shop<span>Verse</span></a>
+  <ul class="nav-links" id="nav-user-area"></ul>
+  <a href="/pages/cart.html" class="nav-cart btn btn-secondary btn-sm">
+    🛒 Cart <span class="cart-badge" id="cart-count">0</span>
+  </a>
+</nav>
+
+<div style="max-width:1200px;margin:2rem auto;padding:0 2rem">
+  <h1 style="font-size:2rem;margin-bottom:2rem">🛒 Shopping Cart</h1>
+</div>
+
+<div class="cart-layout" id="cart-layout">
+  <div class="spinner"></div>
+</div>
+
+<!-- Checkout Modal -->
+<div class="modal-overlay" id="checkout-modal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h3>📦 Checkout</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Street Address</label>
+      <input type="text" id="street" placeholder="123 Main St">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div class="form-group">
+        <label>City</label>
+        <input type="text" id="city" placeholder="New York">
+      </div>
+      <div class="form-group">
+        <label>ZIP Code</label>
+        <input type="text" id="zip" placeholder="10001">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div class="form-group">
+        <label>State</label>
+        <input type="text" id="state" placeholder="NY">
+      </div>
+      <div class="form-group">
+        <label>Country</label>
+        <input type="text" id="country" placeholder="USA">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Payment Method</label>
+      <select id="paymentMethod">
+        <option value="Credit Card">💳 Credit Card</option>
+        <option value="PayPal">🅿️ PayPal</option>
+        <option value="Cash on Delivery">💵 Cash on Delivery</option>
+      </select>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="placeOrder()">Place Order 🎉</button>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+<script src="/js/app.js"></script>
+<script>
+let cartData = null;
+
+async function loadCart() {
+  if (!isLoggedIn()) {
+    document.getElementById('cart-layout').innerHTML = `
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="empty-icon">🔒</div>
+        <p>Please login to view your cart</p>
+        <a href="/pages/login.html" class="btn btn-primary" style="margin-top:1rem">Login</a>
+      </div>`;
+    return;
+  }
+  try {
+    cartData = await api('GET', '/cart');
+    renderCart();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function renderCart() {
+  const layout = document.getElementById('cart-layout');
+  if (!cartData?.items?.length) {
+    layout.innerHTML = `
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="empty-icon">🛒</div>
+        <p>Your cart is empty</p>
+        <a href="/" class="btn btn-primary" style="margin-top:1rem">Start Shopping</a>
+      </div>`;
+    return;
+  }
+
+  const subtotal = cartData.items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+  const tax = subtotal * 0.1;
+  const shipping = subtotal > 100 ? 0 : 10;
+  const total = subtotal + tax + shipping;
+
+  layout.innerHTML = `
+    <div id="cart-items"></div>
+    <div class="order-summary">
+      <h3 style="margin-bottom:1.5rem">Order Summary</h3>
+      <div class="summary-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>
+      <div class="summary-row"><span>Tax (10%)</span><span>$${tax.toFixed(2)}</span></div>
+      <div class="summary-row"><span>Shipping</span><span>${shipping === 0 ? '<span style="color:var(--success)">FREE</span>' : '$' + shipping.toFixed(2)}</span></div>
+      <div class="summary-row total"><span>Total</span><span>$${total.toFixed(2)}</span></div>
+      <button class="btn btn-primary btn-block" style="margin-top:1.5rem" onclick="openModal()">Proceed to Checkout</button>
+      <a href="/" class="btn btn-secondary btn-block" style="margin-top:0.5rem;text-align:center">Continue Shopping</a>
+      ${subtotal > 100 ? '' : '<p style="font-size:0.8rem;color:var(--success);margin-top:0.5rem;text-align:center">🎁 Add $' + (100-subtotal).toFixed(2) + ' more for FREE shipping!</p>'}
+    </div>`;
+
+  const itemsContainer = document.getElementById('cart-items');
+  cartData.items.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'cart-item';
+    div.innerHTML = `
+      <img src="${item.product.image}" alt="${item.product.name}" onerror="this.src='https://via.placeholder.com/90x90'">
+      <div class="cart-item-info">
+        <div class="cart-item-name">${item.product.name}</div>
+        <div class="cart-item-price">$${item.product.price.toFixed(2)}</div>
+        <div class="qty-control">
+          <button class="qty-btn" onclick="updateQty('${item.product._id}', ${item.quantity - 1})">−</button>
+          <span class="qty-value">${item.quantity}</span>
+          <button class="qty-btn" onclick="updateQty('${item.product._id}', ${item.quantity + 1})">+</button>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:700;color:var(--secondary)">$${(item.product.price * item.quantity).toFixed(2)}</div>
+        <button class="btn btn-danger btn-sm" style="margin-top:0.5rem" onclick="removeItem('${item.product._id}')">Remove</button>
+      </div>`;
+    itemsContainer.appendChild(div);
+  });
+}
+
+async function updateQty(productId, quantity) {
+  try {
+    cartData = await api('PUT', '/cart/update', { productId, quantity });
+    renderCart();
+    updateCartCount();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function removeItem(productId) {
+  try {
+    cartData = await api('DELETE', `/cart/remove/${productId}`);
+    renderCart();
+    updateCartCount();
+    showToast('Item removed', 'info');
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+function openModal() { document.getElementById('checkout-modal').classList.add('active'); }
+function closeModal() { document.getElementById('checkout-modal').classList.remove('active'); }
+
+async function placeOrder() {
+  const shippingAddress = {
+    street: document.getElementById('street').value,
+    city: document.getElementById('city').value,
+    zip: document.getElementById('zip').value,
+    state: document.getElementById('state').value,
+    country: document.getElementById('country').value
+  };
+  const paymentMethod = document.getElementById('paymentMethod').value;
+  if (!shippingAddress.street || !shippingAddress.city) return showToast('Please fill shipping address', 'warning');
+
+  const items = cartData.items.map(i => ({
+    product: i.product._id, name: i.product.name,
+    image: i.product.image, price: i.product.price, quantity: i.quantity
+  }));
+
+  try {
+    const order = await api('POST', '/orders', { items, shippingAddress, paymentMethod });
+    closeModal();
+    showToast('Order placed successfully! 🎉');
+    // Simulate payment
+    await api('PUT', `/orders/${order._id}/pay`);
+    setTimeout(() => window.location = '/pages/orders.html', 1500);
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+loadCart();
+</script>
+</body>
+</html>

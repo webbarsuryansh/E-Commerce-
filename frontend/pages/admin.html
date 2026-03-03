@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Panel - ShopVerse</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="admin-layout">
+  <!-- Sidebar -->
+  <div class="admin-sidebar">
+    <a class="logo" href="/" style="display:block;margin-bottom:2rem">Shop<span style="color:var(--secondary)">Verse</span></a>
+    <div class="admin-nav-item active" onclick="showTab('dashboard', this)">📊 Dashboard</div>
+    <div class="admin-nav-item" onclick="showTab('products', this)">📦 Products</div>
+    <div class="admin-nav-item" onclick="showTab('orders', this)">🛒 Orders</div>
+    <div class="admin-nav-item" onclick="showTab('users', this)">👥 Users</div>
+    <div class="admin-nav-item" onclick="showTab('add-product', this)">➕ Add Product</div>
+    <a href="/" style="display:block;margin-top:auto;padding:0.75rem;color:var(--text-muted);text-decoration:none">← Back to Shop</a>
+  </div>
+
+  <!-- Content -->
+  <div class="admin-content">
+    <div id="tab-dashboard">
+      <h2 style="margin-bottom:1.5rem">📊 Dashboard</h2>
+      <div class="stats-grid" id="stats-grid"><div class="spinner"></div></div>
+      <h3 style="margin:2rem 0 1rem">Recent Orders</h3>
+      <div id="recent-orders"></div>
+    </div>
+
+    <div id="tab-products" style="display:none">
+      <h2 style="margin-bottom:1.5rem">📦 Products</h2>
+      <div id="admin-products"></div>
+    </div>
+
+    <div id="tab-orders" style="display:none">
+      <h2 style="margin-bottom:1.5rem">🛒 All Orders</h2>
+      <div id="admin-orders"></div>
+    </div>
+
+    <div id="tab-users" style="display:none">
+      <h2 style="margin-bottom:1.5rem">👥 Users (Count)</h2>
+      <p style="color:var(--text-muted)">User management coming soon.</p>
+    </div>
+
+    <div id="tab-add-product" style="display:none">
+      <h2 style="margin-bottom:1.5rem">➕ Add New Product</h2>
+      <div style="background:var(--card-bg);border-radius:16px;padding:2rem;max-width:600px;border:1px solid var(--border)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+          <div class="form-group"><label>Product Name</label><input type="text" id="p-name" placeholder="iPhone 15 Pro"></div>
+          <div class="form-group"><label>Brand</label><input type="text" id="p-brand" placeholder="Apple"></div>
+          <div class="form-group"><label>Price ($)</label><input type="number" id="p-price" placeholder="999.99"></div>
+          <div class="form-group"><label>Stock</label><input type="number" id="p-stock" placeholder="50"></div>
+          <div class="form-group"><label>Category</label>
+            <select id="p-category">
+              <option>Electronics</option><option>Sports</option>
+              <option>Kitchen</option><option>Accessories</option><option>Clothing</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Featured</label>
+            <select id="p-featured"><option value="false">No</option><option value="true">Yes</option></select>
+          </div>
+        </div>
+        <div class="form-group"><label>Image URL</label><input type="text" id="p-image" placeholder="https://..."></div>
+        <div class="form-group"><label>Description</label><textarea id="p-desc" placeholder="Product description..."></textarea></div>
+        <button class="btn btn-primary" onclick="addProduct()">Add Product</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+<script src="/js/app.js"></script>
+<script>
+function showTab(name, el) {
+  document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+  document.querySelectorAll('.admin-nav-item').forEach(i => i.classList.remove('active'));
+  document.getElementById('tab-' + name).style.display = 'block';
+  el.classList.add('active');
+  if (name === 'products') loadAdminProducts();
+  if (name === 'orders') loadAdminOrders();
+}
+
+async function loadDashboard() {
+  if (!isAdmin()) { window.location = '/'; return; }
+  try {
+    const [products, orders] = await Promise.all([
+      api('GET', '/products?limit=1000'),
+      api('GET', '/orders')
+    ]);
+    const revenue = orders.reduce((sum, o) => sum + (o.isPaid ? o.totalPrice : 0), 0);
+    document.getElementById('stats-grid').innerHTML = `
+      <div class="stat-card"><div class="stat-value">${products.total}</div><div class="stat-label">Total Products</div></div>
+      <div class="stat-card"><div class="stat-value">${orders.length}</div><div class="stat-label">Total Orders</div></div>
+      <div class="stat-card"><div class="stat-value">$${revenue.toFixed(0)}</div><div class="stat-label">Total Revenue</div></div>
+      <div class="stat-card"><div class="stat-value">${orders.filter(o => o.status === 'Pending').length}</div><div class="stat-label">Pending Orders</div></div>`;
+
+    const recentOrders = orders.slice(0, 5);
+    document.getElementById('recent-orders').innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Order ID</th><th>Customer</th><th>Total</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody>${recentOrders.map(o => `
+          <tr>
+            <td style="font-family:monospace;font-size:0.8rem">${o._id.slice(-8)}</td>
+            <td>${o.user?.name || 'N/A'}</td>
+            <td style="color:var(--secondary);font-weight:700">$${o.totalPrice.toFixed(2)}</td>
+            <td><span class="badge badge-primary">${o.status}</span></td>
+            <td>${new Date(o.createdAt).toLocaleDateString()}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function loadAdminProducts() {
+  const data = await api('GET', '/products?limit=50');
+  document.getElementById('admin-products').innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>Image</th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead>
+      <tbody>${data.products.map(p => `
+        <tr>
+          <td><img src="${p.image}" width="50" height="50" style="border-radius:8px;object-fit:cover"></td>
+          <td>${p.name}</td>
+          <td><span class="badge badge-primary">${p.category}</span></td>
+          <td style="color:var(--secondary);font-weight:700">$${p.price}</td>
+          <td>${p.stock}</td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteProduct('${p._id}', this)">Delete</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function loadAdminOrders() {
+  const orders = await api('GET', '/orders');
+  document.getElementById('admin-orders').innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>ID</th><th>Customer</th><th>Total</th><th>Status</th><th>Paid</th><th>Update</th></tr></thead>
+      <tbody>${orders.map(o => `
+        <tr>
+          <td style="font-family:monospace;font-size:0.8rem">${o._id.slice(-8)}</td>
+          <td>${o.user?.name || 'N/A'}</td>
+          <td style="color:var(--secondary);font-weight:700">$${o.totalPrice.toFixed(2)}</td>
+          <td><span class="badge badge-primary">${o.status}</span></td>
+          <td>${o.isPaid ? '✅' : '❌'}</td>
+          <td>
+            <select onchange="updateOrderStatus('${o._id}', this.value)" style="background:var(--darker);border:1px solid var(--border);color:var(--text);padding:0.3rem;border-radius:6px">
+              ${['Pending','Processing','Shipped','Delivered','Cancelled'].map(s =>
+                `<option ${s === o.status ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function deleteProduct(id, btn) {
+  if (!confirm('Delete this product?')) return;
+  try {
+    await api('DELETE', `/products/${id}`);
+    btn.closest('tr').remove();
+    showToast('Product deleted');
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function updateOrderStatus(id, status) {
+  try {
+    await api('PUT', `/orders/${id}/status`, { status });
+    showToast('Order status updated');
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function addProduct() {
+  const product = {
+    name: document.getElementById('p-name').value,
+    brand: document.getElementById('p-brand').value,
+    price: Number(document.getElementById('p-price').value),
+    stock: Number(document.getElementById('p-stock').value),
+    category: document.getElementById('p-category').value,
+    featured: document.getElementById('p-featured').value === 'true',
+    image: document.getElementById('p-image').value,
+    description: document.getElementById('p-desc').value
+  };
+  if (!product.name || !product.price) return showToast('Fill required fields', 'warning');
+  try {
+    await api('POST', '/products', product);
+    showToast('Product added! ✅');
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+loadDashboard();
+</script>
+</body>
+</html>

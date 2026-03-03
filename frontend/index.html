@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopVerse - Modern E-Commerce</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <a class="logo" href="/">Shop<span>Verse</span></a>
+  <ul class="nav-links" id="nav-user-area">
+    <li><a href="/pages/login.html">Login</a></li>
+    <li><a href="/pages/register.html" class="btn btn-primary btn-sm">Sign Up</a></li>
+  </ul>
+  <a href="/pages/cart.html" class="nav-cart btn btn-secondary btn-sm">
+    🛒 Cart <span class="cart-badge" id="cart-count">0</span>
+  </a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-content">
+    <h1>Discover <span>Amazing</span> Products</h1>
+    <p>Shop the latest electronics, fashion, sports gear, and more.</p>
+    <div class="hero-search">
+      <input type="text" id="hero-search" placeholder="Search products..." />
+      <button class="btn btn-primary" onclick="handleSearch()">🔍 Search</button>
+    </div>
+  </div>
+</section>
+
+<!-- CATEGORIES -->
+<div class="section">
+  <div class="section-title">Browse by <span>Category</span></div>
+  <div id="categories-row" style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:2rem"></div>
+</div>
+
+<!-- FEATURED PRODUCTS -->
+<div class="section">
+  <div class="section-title">⭐ Featured <span>Products</span></div>
+  <div id="featured-grid" class="products-grid">
+    <div class="spinner"></div>
+  </div>
+</div>
+
+<!-- ALL PRODUCTS -->
+<div class="section">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+    <div class="section-title">All <span>Products</span></div>
+    <select id="sort-select" style="background:var(--card-bg);border:1px solid var(--border);color:var(--text);padding:0.5rem 1rem;border-radius:8px" onchange="loadProducts()">
+      <option value="">Sort: Default</option>
+      <option value="price-asc">Price: Low to High</option>
+      <option value="price-desc">Price: High to Low</option>
+      <option value="newest">Newest</option>
+      <option value="rating">Top Rated</option>
+    </select>
+  </div>
+  <div id="products-grid" class="products-grid"><div class="spinner"></div></div>
+  <div id="pagination" style="display:flex;justify-content:center;gap:0.5rem;margin-top:2rem"></div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-grid">
+    <div class="footer-col">
+      <h4>ShopVerse</h4>
+      <p style="color:var(--text-muted);font-size:0.9rem">Your one-stop destination for quality products.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Quick Links</h4>
+      <a href="/">Home</a>
+      <a href="/pages/cart.html">Cart</a>
+      <a href="/pages/orders.html">Orders</a>
+    </div>
+    <div class="footer-col">
+      <h4>Categories</h4>
+      <a href="#">Electronics</a>
+      <a href="#">Sports</a>
+      <a href="#">Kitchen</a>
+    </div>
+    <div class="footer-col">
+      <h4>Contact</h4>
+      <a href="#">support@shopverse.com</a>
+      <a href="#">1-800-SHOPVERSE</a>
+    </div>
+  </div>
+  <div class="footer-bottom">© 2024 ShopVerse. Codewithlala</div>
+</footer>
+
+<div id="toast-container" class="toast-container"></div>
+<script src="/js/app.js"></script>
+<script>
+  let currentPage = 1;
+  let activeCategory = '';
+
+  async function loadCategories() {
+    const cats = await api('GET', '/products/categories');
+    const row = document.getElementById('categories-row');
+    const allBtn = document.createElement('button');
+    allBtn.className = 'btn btn-primary btn-sm';
+    allBtn.textContent = 'All';
+    allBtn.onclick = () => { activeCategory = ''; loadProducts(); };
+    row.appendChild(allBtn);
+    cats.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-secondary btn-sm';
+      btn.textContent = cat;
+      btn.onclick = () => { activeCategory = cat; loadProducts(); };
+      row.appendChild(btn);
+    });
+  }
+
+  async function loadFeatured() {
+    const products = await api('GET', '/products/featured');
+    const grid = document.getElementById('featured-grid');
+    grid.innerHTML = '';
+    products.forEach(p => grid.appendChild(createProductCard(p)));
+  }
+
+  async function loadProducts() {
+    const grid = document.getElementById('products-grid');
+    grid.innerHTML = '<div class="spinner"></div>';
+    const sort = document.getElementById('sort-select').value;
+    const params = new URLSearchParams({ page: currentPage, limit: 8 });
+    if (sort) params.set('sort', sort);
+    if (activeCategory) params.set('category', activeCategory);
+    const data = await api('GET', `/products?${params}`);
+    grid.innerHTML = '';
+    if (!data.products.length) {
+      grid.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><p>No products found</p></div>';
+      return;
+    }
+    data.products.forEach(p => grid.appendChild(createProductCard(p)));
+    renderPagination(data.pages, data.page);
+  }
+
+  function renderPagination(pages, page) {
+    const pg = document.getElementById('pagination');
+    pg.innerHTML = '';
+    for (let i = 1; i <= pages; i++) {
+      const btn = document.createElement('button');
+      btn.textContent = i;
+      btn.className = `btn ${i === page ? 'btn-primary' : 'btn-secondary'} btn-sm`;
+      btn.onclick = () => { currentPage = i; loadProducts(); };
+      pg.appendChild(btn);
+    }
+  }
+
+  function handleSearch() {
+    const q = document.getElementById('hero-search').value.trim();
+    if (q) window.location = `/index.html?search=${encodeURIComponent(q)}`;
+  }
+
+  document.getElementById('hero-search').addEventListener('keydown', e => {
+    if (e.key === 'Enter') handleSearch();
+  });
+
+  loadCategories();
+  loadFeatured();
+  loadProducts();
+</script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Orders - ShopVerse</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <a class="logo" href="/">Shop<span>Verse</span></a>
+  <ul class="nav-links" id="nav-user-area"></ul>
+  <a href="/pages/cart.html" class="nav-cart btn btn-secondary btn-sm">
+    🛒 Cart <span class="cart-badge" id="cart-count">0</span>
+  </a>
+</nav>
+
+<div class="section">
+  <h1 style="font-size:2rem;margin-bottom:2rem">📦 My Orders</h1>
+  <div id="orders-container"><div class="spinner"></div></div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+<script src="/js/app.js"></script>
+<script>
+const statusColors = {
+  'Pending': 'warning', 'Processing': 'primary',
+  'Shipped': 'info', 'Delivered': 'success', 'Cancelled': 'danger'
+};
+
+async function loadOrders() {
+  if (!isLoggedIn()) {
+    document.getElementById('orders-container').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🔒</div>
+        <p>Please login to view your orders</p>
+        <a href="/pages/login.html" class="btn btn-primary" style="margin-top:1rem">Login</a>
+      </div>`;
+    return;
+  }
+  try {
+    const orders = await api('GET', '/orders/myorders');
+    const container = document.getElementById('orders-container');
+    if (!orders.length) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">📦</div>
+          <p>No orders yet. Start shopping!</p>
+          <a href="/" class="btn btn-primary" style="margin-top:1rem">Shop Now</a>
+        </div>`;
+      return;
+    }
+    container.innerHTML = '';
+    orders.forEach(order => {
+      const div = document.createElement('div');
+      div.style.cssText = 'background:var(--card-bg);border-radius:16px;padding:1.5rem;margin-bottom:1.5rem;border:1px solid var(--border)';
+      div.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1rem">
+          <div>
+            <div style="font-size:0.85rem;color:var(--text-muted)">Order ID</div>
+            <div style="font-family:monospace;font-size:0.9rem">${order._id}</div>
+          </div>
+          <div><span class="badge badge-${statusColors[order.status] || 'primary'}">${order.status}</span></div>
+          <div style="text-align:right">
+            <div style="font-size:0.85rem;color:var(--text-muted)">${new Date(order.createdAt).toLocaleDateString()}</div>
+            <div style="font-weight:800;color:var(--secondary);font-size:1.2rem">$${order.totalPrice.toFixed(2)}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+          ${order.items.map(item => `
+            <div style="display:flex;align-items:center;gap:0.5rem;background:rgba(255,255,255,0.03);padding:0.5rem;border-radius:8px">
+              <img src="${item.image}" width="40" height="40" style="border-radius:6px;object-fit:cover" onerror="this.src='https://via.placeholder.com/40'">
+              <div>
+                <div style="font-size:0.85rem;font-weight:600">${item.name}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">x${item.quantity} · $${item.price}</div>
+              </div>
+            </div>`).join('')}
+        </div>
+        <div style="display:flex;gap:1rem;margin-top:1rem;font-size:0.85rem;color:var(--text-muted)">
+          <span>${order.isPaid ? '✅ Paid' : '⏳ Payment Pending'}</span>
+          <span>${order.isDelivered ? '✅ Delivered' : '🚚 In Transit'}</span>
+          <span>📍 ${order.shippingAddress.city || 'N/A'}</span>
+        </div>`;
+      container.appendChild(div);
+    });
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+loadOrders();
+</script>
+</body>
+</html>
